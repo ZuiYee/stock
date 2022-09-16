@@ -2,22 +2,24 @@
 # -*- coding: utf-8 -*-
 
 import os.path
-import torndb
+
+import akshare as ak
+import bokeh as bh
+import numpy as np
+import pandas as pd
 import tornado.escape
-from tornado import gen
 import tornado.httpserver
 import tornado.ioloop
 import tornado.options
+import torndb_for_python3 as torndb
+from tornado import gen
+
 import libs.common as common
-import libs.stock_web_dic as stock_web_dic
-import web.dataTableHandler as dataTableHandler
+import web.base as webBase
 import web.dataEditorHandler as dataEditorHandler
 import web.dataIndicatorsHandler as dataIndicatorsHandler
-import web.base as webBase
-import pandas as pd
-import numpy as np
-import akshare as ak
-import bokeh as bh
+import web.dataTableHandler as dataTableHandler
+
 
 class Application(tornado.web.Application):
     def __init__(self):
@@ -25,8 +27,8 @@ class Application(tornado.web.Application):
             # 设置路由
             (r"/", HomeHandler),
             (r"/stock/", HomeHandler),
-            (r"/test_akshare", TestHandler),# 测试页面，做写js 测试。
-            (r"/test2", Test2Handler),# 测试页面，做写js 测试。
+            (r"/test_akshare", TestHandler),  # 测试页面，做写js 测试。
+            (r"/test2", Test2Handler),  # 测试页面，做写js 测试。
             # 使用datatable 展示报表数据模块。
             (r"/stock/api_data", dataTableHandler.GetStockDataHandler),
             (r"/stock/data", dataTableHandler.GetStockHtmlHandler),

@@ -2,16 +2,9 @@
 # -*- coding: utf-8 -*-
 
 
-import libs.common as common
-import sys
-import os
-import time
-import pandas as pd
 import tushare as ts
-from sqlalchemy.types import NVARCHAR
-from sqlalchemy import inspect
-import datetime
-import shutil
+
+import libs.common as common
 
 
 ####### 使用 5.pdf，先做 基本面数据 的数据，然后在做交易数据。
@@ -20,10 +13,10 @@ def stat_all(tmp_datetime):
     datetime_str = (tmp_datetime).strftime("%Y-%m-%d")
     datetime_int = (tmp_datetime).strftime("%Y%m%d")
 
-    cache_dir = common.bash_stock_tmp % (datetime_str[0:7], datetime_str)
-    if os.path.exists(cache_dir):
-        shutil.rmtree(cache_dir)
-        print("remove cache dir force :", cache_dir)
+    # cache_dir = common.bash_stock_tmp % (datetime_str[0:7], datetime_str)
+    # if os.path.exists(cache_dir):
+    #     shutil.rmtree(cache_dir)
+    #     print("remove cache dir force :", cache_dir)
 
     print("datetime_str:", datetime_str)
     print("datetime_int:", datetime_int)

@@ -3,30 +3,34 @@
 
 # apk add py-mysqldb or
 
-import platform
 import datetime
-import time
-import sys
 import os
+import sys
+import time
+import traceback
+
 import MySQLdb
 from sqlalchemy import create_engine
-from sqlalchemy.types import NVARCHAR
 from sqlalchemy import inspect
-import pandas as pd
-import traceback
-import akshare as ak
+from sqlalchemy.types import NVARCHAR
 
 # 使用环境变量获得数据库。兼容开发模式可docker模式。
-MYSQL_HOST = os.environ.get('MYSQL_HOST') if (os.environ.get('MYSQL_HOST') != None) else "mysqldb"
-MYSQL_USER = os.environ.get('MYSQL_USER') if (os.environ.get('MYSQL_USER') != None) else "root"
-MYSQL_PWD = os.environ.get('MYSQL_PWD') if (os.environ.get('MYSQL_PWD') != None) else "mysqldb"
-MYSQL_DB = os.environ.get('MYSQL_DB') if (os.environ.get('MYSQL_DB') != None) else "stock_data"
+# MYSQL_HOST = os.environ.get('MYSQL_HOST') if (os.environ.get('MYSQL_HOST') != None) else "mysqldb"
+# MYSQL_USER = os.environ.get('MYSQL_USER') if (os.environ.get('MYSQL_USER') != None) else "root"
+# MYSQL_PWD = os.environ.get('MYSQL_PWD') if (os.environ.get('MYSQL_PWD') != None) else "mysqldb"
+# MYSQL_DB = os.environ.get('MYSQL_DB') if (os.environ.get('MYSQL_DB') != None) else "stock_data"
+MYSQL_HOST = "101.43.30.220"
+MYSQL_USER = "root"
+MYSQL_PWD = "mariadb"
+MYSQL_DB = "stock_data"
 
 print("MYSQL_HOST :", MYSQL_HOST, ",MYSQL_USER :", MYSQL_USER, ",MYSQL_DB :", MYSQL_DB)
 MYSQL_CONN_URL = "mysql+mysqldb://" + MYSQL_USER + ":" + MYSQL_PWD + "@" + MYSQL_HOST + ":3306/" + MYSQL_DB + "?charset=utf8mb4"
 print("MYSQL_CONN_URL :", MYSQL_CONN_URL)
 
 __version__ = "2.0.0"
+
+
 # 每次发布时候更新。
 
 def engine():
@@ -179,30 +183,31 @@ def run_with_args(run_fun):
 # 设置基础目录，每次加载使用。
 bash_stock_tmp = "/data/cache/hist_data_cache/%s/%s/"
 if not os.path.exists(bash_stock_tmp):
-    os.makedirs(bash_stock_tmp)  # 创建多个文件夹结构。
+    # os.makedirs(bash_stock_tmp)  # 创建多个文件夹结构。
     print("######################### init tmp dir #########################")
 
 
 # 增加读取股票缓存方法。加快处理速度。
 def get_hist_data_cache(code, date_start, date_end):
-    cache_dir = bash_stock_tmp % (date_end[0:7], date_end)
-    # 如果没有文件夹创建一个。月文件夹和日文件夹。方便删除。
-    # print("cache_dir:", cache_dir)
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
-    cache_file = cache_dir + "%s^%s.gzip.pickle" % (date_end, code)
-    # 如果缓存存在就直接返回缓存数据。压缩方式。
-    if os.path.isfile(cache_file):
-        print("######### read from cache #########", cache_file)
-        return pd.read_pickle(cache_file, compression="gzip")
-    else:
-        print("######### get data, write cache #########", code, date_start, date_end)
-        stock = ak.stock_zh_a_hist(symbol= code, start_date=date_start, end_date=date_end, adjust="")
-        stock.columns = ['date', 'open', 'close', 'high', 'low', 'volume', 'amount', 'amplitude', 'quote_change',
-                         'ups_downs', 'turnover']
-        if stock is None:
-            return None
-        stock = stock.sort_index(0)  # 将数据按照日期排序下。
-        print(stock)
-        stock.to_pickle(cache_file, compression="gzip")
-        return stock
+    return None
+    # cache_dir = bash_stock_tmp % (date_end[0:7], date_end)
+    # # 如果没有文件夹创建一个。月文件夹和日文件夹。方便删除。
+    # # print("cache_dir:", cache_dir)
+    # if not os.path.exists(cache_dir):
+    #     os.makedirs(cache_dir)
+    # cache_file = cache_dir + "%s^%s.gzip.pickle" % (date_end, code)
+    # # 如果缓存存在就直接返回缓存数据。压缩方式。
+    # if os.path.isfile(cache_file):
+    #     print("######### read from cache #########", cache_file)
+    #     return pd.read_pickle(cache_file, compression="gzip")
+    # else:
+    #     print("######### get data, write cache #########", code, date_start, date_end)
+    #     stock = ak.stock_zh_a_hist(symbol= code, start_date=date_start, end_date=date_end, adjust="")
+    #     stock.columns = ['date', 'open', 'close', 'high', 'low', 'volume', 'amount', 'amplitude', 'quote_change',
+    #                      'ups_downs', 'turnover']
+    #     if stock is None:
+    #         return None
+    #     stock = stock.sort_index(0)  # 将数据按照日期排序下。
+    #     print(stock)
+    #     stock.to_pickle(cache_file, compression="gzip")
+    #     return stock
