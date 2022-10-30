@@ -2,21 +2,27 @@ import numpy as np
 import scipy as sp
 from jqdatasdk import *
 from scipy.stats import rankdata
-
+import logging
 
 class GTJA_191:
 
-    def __init__(self, df_data):
+    def __init__(self, df_data, symbol):
         import copy
         df = copy.deepcopy(df_data)
-        self.open = df['open'].to_frame(name="111")
+        # self.open = df['open'].to_frame(name=symbol)
+        self.open = pd.to_numeric(df['open'], errors='coerce').to_frame(name=symbol)
         self.open_price = self.open
-        self.high = df["high"].to_frame(name="111")
-        self.low = df["low"].to_frame(name="111")
-        self.close = df["close"].to_frame(name="111")
-        self.volume = df["volume"].apply(np.log).to_frame(name="111")
-        self.returns = df['pct_chg'].to_frame(name="111")  # 涨跌幅(%)
-        self.vwap = df["avg"].to_frame(name="111")  # 均价(VWAP)
+        # self.high = df["high"].to_frame(name=symbol)
+        self.high = pd.to_numeric(df['high'], errors='coerce').to_frame(name=symbol)
+        # self.low = df["low"].to_frame(name=symbol)
+        self.low = pd.to_numeric(df['low'], errors='coerce').to_frame(name=symbol)
+        # self.close = df["close"].to_frame(name=symbol)
+        self.close = pd.to_numeric(df['close'], errors='coerce').to_frame(name=symbol)
+        # self.volume = df["volume"].to_frame(name=symbol)
+        self.volume = pd.to_numeric(df['volume'], errors='coerce').to_frame(name=symbol)
+        # self.returns = df["turnover"].to_frame(name=symbol)  # 涨跌幅(%)
+        self.returns = pd.to_numeric(df['turnover'], errors='coerce').to_frame(name=symbol)
+        # self.avg = df["avg"].to_frame(name="000066.XSHE")  # 均价(VWAP)
 
     def func_rank(self, na):
         return rankdata(na)[-1] / rankdata(na).max()
@@ -37,17 +43,19 @@ class GTJA_191:
     #############################################################################
 
     def alpha_001(self):
-        data1 = self.volume.diff(periods=1).rank(axis=0, pct=False)
-        data2 = ((self.close - self.open_price) / self.open_price).rank(axis=0, pct=False)
-        alpha = -data1.iloc[-6:, :].corrwith(data2.iloc[-6:, :]).dropna()
+        data1 = np.log(self.volume).diff(periods=1).rank(axis=0, pct=True)
+        data2 = ((self.close - self.open) / self.open).rank(axis=0, pct=True)
+        alpha = data1.iloc[-6:, :].corrwith(data2.iloc[-6:, :]).dropna()
+        alpha = -alpha
         alpha = alpha.dropna()
         return alpha
 
     def alpha_002(self):
         ##### -1 * delta((((close-low)-(high-close))/((high-low)),1))####
-        result = ((self.close - self.low) - (self.high - self.close)) / ((self.high - self.low)).diff()
+        result = (((self.close - self.low) - (self.high - self.close)) / ((self.high - self.low))).diff()
         m = result.iloc[-1, :].dropna()
         alpha = m[(m < np.inf) & (m > -np.inf)]
+        alpha = -alpha
         return alpha.dropna()
 
         ################################################################
@@ -67,18 +75,20 @@ class GTJA_191:
 
     ########################################################################
     def alpha_004(self):
-        condition1 = (pd.rolling_std(self.close, 8) < pd.rolling_sum(self.close, 2) / 2)
-        condition2 = (pd.rolling_sum(self.close, 2) / 2 < (
-                pd.rolling_sum(self.close, 8) / 8 - pd.rolling_std(self.close, 8)))
-        condition3 = (1 <= self.volume / pd.rolling_mean(self.volume, 20))
-        condition3
+        # condition1 = (pd.rolling_std(self.close, 8) < pd.rolling_sum(self.close, 2) / 2)
+        condition1 = (self.close.rolling(8).std() < self.close.rolling(2).sum() / 2)
+        # condition2 = (pd.rolling_sum(self.close, 2) / 2 < (pd.rolling_sum(self.close, 8) / 8 - pd.rolling_std(self.close, 8)))
+        condition2 = (self.close.rolling(2).sum() / 2 < (self.close.rolling(8).sum() / 8 - self.close.rolling(8).std()))
+        # condition3 = (1 <= self.volume / pd.rolling_mean(self.volume, 20))
+        condition3 = (1 <= self.volume / self.volume.rolling(20).mean())
 
         indicator1 = pd.DataFrame(np.ones(self.close.shape), index=self.close.index,
                                   columns=self.close.columns)  # [condition2]
         indicator2 = -pd.DataFrame(np.ones(self.close.shape), index=self.close.index,
                                    columns=self.close.columns)  # [condition3]
 
-        part0 = pd.rolling_sum(self.close, 8) / 8
+        # part0 = pd.rolling_sum(self.close, 8) / 8
+        part0 = self.close.rolling(8).sum() / 8
         part1 = indicator2[condition1].fillna(0)
         part2 = (indicator1[~condition1][condition2]).fillna(0)
         part3 = (indicator1[~condition1][~condition2][condition3]).fillna(0)
@@ -92,7 +102,8 @@ class GTJA_191:
     def alpha_005(self):
         ts_volume = (self.volume.iloc[-7:, :]).rank(axis=0, pct=True)
         ts_high = (self.high.iloc[-7:, :]).rank(axis=0, pct=True)
-        corr_ts = pd.rolling_corr(ts_high, ts_volume, 5)
+        # corr_ts = pd.rolling_corr(ts_high, ts_volume, 5)
+        corr_ts = ts_high.rolling(5).corr(ts_volume)
         alpha = corr_ts.max().dropna()
         alpha = alpha[(alpha < np.inf) & (alpha > -np.inf)]
         return alpha
@@ -124,9 +135,9 @@ class GTJA_191:
 
     ##################################################################
     def alpha_008(self):
-        temp = (self.high + self.low) * 0.2 / 2 + self.avg_price * 0.8
+        temp = (self.high + self.low) * 0.2 / 2 + self.avg * 0.8
         result = -temp.diff(4)
-        alpha = result.rank(axis=1, pct=True)
+        alpha = result.rank(axis=0, pct=True)
         alpha = alpha.iloc[-1, :]
         return alpha.dropna()
 
@@ -134,7 +145,8 @@ class GTJA_191:
     def alpha_009(self):
         temp = (self.high + self.low) * 0.5 - (self.high.shift() + self.low.shift()) * 0.5 * (
                 self.high - self.low) / self.volume  # 计算close_{i-1}
-        result = pd.ewma(temp, alpha=2 / 7)
+        result = pd.DataFrame.ewm(temp, alpha=2 / 7).mean()
+        # result = temp.ewma(alpha= 2/7).mean()
         alpha = result.iloc[-1, :]
         return alpha.dropna()
 
@@ -235,7 +247,8 @@ class GTJA_191:
 
     ##################################################################
     def alpha_021(self):
-        A = pd.rolling_mean(self.close, 6).iloc[-6:, :]
+        # A = pd.rolling_mean(self.close, 6).iloc[-6:, :]
+        A = self.close.rolling(6).mean().iloc[-6:, :]
         B = np.arange(1, 7)
         temp = A.apply(lambda x: sp.stats.linregress(x, B), axis=0)
         drop_list = [i for i in range(len(temp)) if temp[i][3] > 0.05]
@@ -246,11 +259,14 @@ class GTJA_191:
 
     ##################################################################
     def alpha_022(self):
-        part1 = (self.close - pd.rolling_mean(self.close, 6)) / pd.rolling_mean(self.close, 6)
-        temp = (self.close - pd.rolling_mean(self.close, 6)) / pd.rolling_mean(self.close, 6)
+        # part1 = (self.close - pd.rolling_mean(self.close, 6)) / pd.rolling_mean(self.close, 6)
+        part1 = (self.close - self.close.rolling(6).mean()) / self.close.rolling(6).mean()
+        # temp = (self.close - pd.rolling_mean(self.close, 6)) / pd.rolling_mean(self.close, 6)
+        temp = (self.close - self.close.rolling(6).mean()) / self.close.rolling(6).mean()
         part2 = temp.shift(3)
         result = part1 - part2
-        result = pd.ewma(result, alpha=1.0 / 12)
+        # result = pd.ewma(result, alpha=1.0 / 12)
+        result = pd.DataFrame.ewm(result, alpha=1.0 / 12).mean()
         alpha = result.iloc[-1, :]
         return alpha.dropna()
 
@@ -258,12 +274,14 @@ class GTJA_191:
 
     def alpha_023(self):
         condition1 = (self.close > self.close.shift())
-        temp1 = pd.rolling_std(self.close, 20)[condition1]
+        # temp1 = pd.rolling_std(self.close, 20)[condition1]
+        temp1 = self.close.rolling(20).std()[condition1]
         temp1 = temp1.fillna(0)
-        temp2 = pd.rolling_std(self.close, 20)[~condition1]
+        # temp2 = pd.rolling_std(self.close, 20)[~condition1]
+        temp2 = self.close.rolling(20).std()[~condition1]
         temp2 = temp2.fillna(0)
-        part1 = pd.ewma(temp1, alpha=1.0 / 20)
-        part2 = pd.ewma(temp2, alpha=1.0 / 20)
+        part1 = pd.DataFrame.ewm(temp1, alpha=1.0 / 20).mean()
+        part2 = pd.DataFrame.ewm(temp2, alpha=1.0 / 20).mean()
         result = part1 * 100 / (part1 + part2)
         alpha = result.iloc[-1, :]
         return alpha.dropna()
@@ -272,7 +290,8 @@ class GTJA_191:
     def alpha_024(self):
         delay5 = self.close.shift(5)
         result = self.close - delay5
-        result = pd.ewma(result, alpha=1.0 / 5)
+        # result = pd.ewma(result, alpha=1.0 / 5)
+        result = pd.DataFrame.ewm(result, alpha=1.0 / 5).mean()
         alpha = result.iloc[-1, :]
         return alpha.dropna()
 
@@ -296,7 +315,8 @@ class GTJA_191:
 
     ##################################################################
     def alpha_026(self):
-        part1 = pd.rolling_sum(self.close, 7) / 7 - self.close
+        # part1 = pd.rolling_sum(self.close, 7) / 7 - self.close
+        part1 = self.close.rolling(7).sum() / 7 - self.close
         part1 = part1.iloc[-1, :]
         delay5 = self.close.shift(5)
         part2 = pd.rolling_corr(self.avg_price, delay5, 230)
@@ -310,11 +330,13 @@ class GTJA_191:
 
     ##################################################################
     def alpha_028(self):
-        temp1 = self.close - pd.rolling_min(self.low, 9)
-        temp2 = pd.rolling_max(self.high, 9) - pd.rolling_min(self.low, 9)
-        part1 = 3 * pd.ewma(temp1 * 100 / temp2, alpha=1.0 / 3)
-        temp3 = pd.ewma(temp1 * 100 / temp2, alpha=1.0 / 3)
-        part2 = 2 * pd.ewma(temp3, alpha=1.0 / 3)
+        # temp1 = self.close - pd.rolling_min(self.low, 9)
+        temp1 = self.close - self.low.rolling(9).min()
+        # temp2 = pd.rolling_max(self.high, 9) - pd.rolling_min(self.low, 9)
+        temp2 = self.high.rolling(9).max() - self.low.rolling(9).min()
+        part1 = 3 * pd.DataFrame.ewm(temp1 * 100 / temp2, alpha=1.0 / 3).mean()
+        temp3 = pd.DataFrame.ewm(temp1 * 100 / temp2, alpha=1.0 / 3).mean()
+        part2 = 2 * pd.DataFrame.ewm(temp3, alpha=1.0 / 3).mean()
         result = part1 - part2
         alpha = result.iloc[-1, :]
         return alpha.dropna()
@@ -332,27 +354,31 @@ class GTJA_191:
 
     ##################################################################
     def alpha_031(self):
-        result = (self.close - pd.rolling_mean(self.close, 12)) * 100 / pd.rolling_mean(self.close, 12)
+        # result = (self.close - pd.rolling_mean(self.close, 12)) * 100 / pd.rolling_mean(self.close, 12)
+        result = (self.close - self.close.rolling(12).mean()) * 100 / self.close.rolling(12).mean()
         alpha = result.iloc[-1, :]
         return alpha.dropna()
 
     ##################################################################
     def alpha_032(self):
-        temp1 = self.high.rank(axis=1, pct=True)
-        temp2 = self.volume.rank(axis=1, pct=True)
-        temp3 = pd.rolling_corr(temp1, temp2, 3)
+        temp1 = self.high.rank(axis=0, pct=True)
+        temp2 = self.volume.rank(axis=0, pct=True)
+        # temp3 = pd.rolling_corr(temp1, temp2, 3)
+        temp3 = temp1.rolling(window=3).corr(temp2)
         temp3 = temp3[(temp3 < np.inf) & (temp3 > -np.inf)].fillna(0)
-        result = (temp3.rank(axis=1, pct=True)).iloc[-3:, :]
+        result = (temp3.rank(axis=0, pct=True)).iloc[-3:, :]
         alpha = -result.sum()
         return alpha.dropna()
 
     ##################################################################
     def alpha_033(self):
         ret = self.close.pct_change()
-        temp1 = pd.rolling_min(self.low, 5)  # TS_MIN
+        # temp1 = pd.rolling_min(self.low, 5)  # TS_MIN
+        temp1 = self.low.rolling(5).min()
         part1 = temp1.shift(5) - temp1
         part1 = part1.iloc[-1, :]
         temp2 = (pd.rolling_sum(ret, 240) - pd.rolling_sum(ret, 20)) / 220
+        temp2 = (ret.rolling(240).sum() - ret.rolling(20).sum()) / 220
         part2 = temp2.rank(axis=1, pct=True)
         part2 = part2.iloc[-1, :]
         temp3 = self.volume.iloc[-5:, :]
@@ -363,7 +389,8 @@ class GTJA_191:
 
     ##################################################################
     def alpha_034(self):
-        result = pd.rolling_mean(self.close, 12) / self.close
+        # result = pd.rolling_mean(self.close, 12) / self.close
+        result = self.close.rolling(12).mean() / self.close
         alpha = result.iloc[-1, :]
         return alpha.dropna()
 
@@ -402,7 +429,8 @@ class GTJA_191:
     ##################################################################
     def alpha_037(self):
         ret = self.close.pct_change()
-        temp = pd.rolling_sum(self.open_price, 5) * pd.rolling_sum(ret, 5)
+        # temp = pd.rolling_sum(self.open_price, 5) * pd.rolling_sum(ret, 5)
+        temp = self.open_price.rolling(5).sum() * ret.rolling(5).sum()
         part1 = temp.rank(axis=1, pct=True)
         part2 = temp.shift(10)
         result = -part1 - part2
@@ -411,7 +439,8 @@ class GTJA_191:
 
     ##################################################################
     def alpha_038(self):
-        sum_20 = pd.rolling_sum(self.high, 20) / 20
+        # sum_20 = pd.rolling_sum(self.high, 20) / 20
+        sum_20 = self.high.rolling(20).sum() / 20
         delta2 = self.high.diff(2)
         condition = (sum_20 < self.high)
         result = -delta2[condition].fillna(0)
@@ -450,9 +479,11 @@ class GTJA_191:
         delay1 = self.close.shift()
         condition = (self.close > delay1)
         vol = self.volume[condition].fillna(0)
-        vol_sum = pd.rolling_sum(vol, 26)
+        # vol_sum = pd.rolling_sum(vol, 26)
+        vol_sum = vol.rolling(26).sum()
         vol1 = self.volume[~condition].fillna(0)
-        vol1_sum = pd.rolling_sum(vol1, 26)
+        # vol1_sum = pd.rolling_sum(vol1, 26)
+        vol1_sum = vol1.rolling(26).sum()
         result = 100 * vol_sum / vol1_sum
         result = result.iloc[-1, :]
         alpha = result
@@ -471,9 +502,12 @@ class GTJA_191:
 
     ##################################################################
     def alpha_042(self):
-        part1 = pd.rolling_corr(self.high, self.volume, 10)
-        part2 = pd.rolling_std(self.high, 10)
-        part2 = part2.rank(axis=1, pct=True)
+        # part1 = pd.rolling_corr(self.high, self.volume, 10)
+        part1 = self.high.rolling(window=10).corr(self.volume)
+
+        # part2 = pd.rolling_std(self.high, 10)
+        part2 = self.high.rolling(window=10).mean()
+        part2 = part2.rank(axis=0, pct=True)
         result = -part1 * part2
         alpha = result.iloc[-1, :]
         alpha = alpha[(alpha < np.inf) & (alpha > -np.inf)]
@@ -488,7 +522,8 @@ class GTJA_191:
         temp1 = self.volume[condition1].fillna(0)
         temp2 = -self.volume[condition2].fillna(0)
         result = temp1 + temp2
-        result = pd.rolling_sum(result, 6)
+        # result = pd.rolling_sum(result, 6)
+        result = result.rolling(6).sum()
         alpha = result.iloc[-1, :].dropna()
         return alpha
 
@@ -528,19 +563,25 @@ class GTJA_191:
 
     ##################################################################
     def alpha_046(self):
-        part1 = pd.rolling_mean(self.close, 3)
-        part2 = pd.rolling_mean(self.close, 6)
-        part3 = pd.rolling_mean(self.close, 12)
-        part4 = pd.rolling_mean(self.close, 24)
+        # part1 = pd.rolling_mean(self.close, 3)
+        part1 = self.close.rolling(3).mean()
+        # part2 = pd.rolling_mean(self.close, 6)
+        part2 = self.close.rolling(6).mean()
+        # part3 = pd.rolling_mean(self.close, 12)
+        part3 = self.close.rolling(12).mean()
+        # part4 = pd.rolling_mean(self.close, 24)
+        part4 = self.close.rolling(24).mean()
         result = (part1 + part2 + part3 + part4) * 0.25 / self.close
         alpha = result.iloc[-1, :].dropna()
         return alpha
 
     ##################################################################
     def alpha_047(self):
-        part1 = pd.rolling_max(self.high, 6) - self.close
-        part2 = pd.rolling_max(self.high, 6) - pd.rolling_min(self.low, 6)
-        result = pd.ewma(100 * part1 / part2, alpha=1.0 / 9)
+        # part1 = pd.rolling_max(self.high, 6) - self.close
+        part1 = self.high.rolling(6).max() - self.close
+        # part2 = pd.rolling_max(self.high, 6) - pd.rolling_min(self.low, 6)
+        part2 = self.high.rolling(6).max() - self.low.rolling(6).min()
+        result = pd.DataFrame.ewm(100 * part1 / part2, alpha=1.0 / 9).mean()
         alpha = result.iloc[-1, :].dropna()
         return alpha
 
@@ -647,9 +688,11 @@ class GTJA_191:
 
     ##################################################################
     def alpha_057(self):
-        part1 = self.close - pd.rolling_min(self.low, 9)
-        part2 = pd.rolling_max(self.high, 9) - pd.rolling_min(self.low, 9)
-        result = pd.ewma(100 * part1 / part2, alpha=1.0 / 3)
+        # part1 = self.close - pd.rolling_min(self.low, 9)
+        part1 = self.close - self.low.rolling(9).min()
+        # part2 = pd.rolling_max(self.high, 9) - pd.rolling_min(self.low, 9)
+        part2 = self.high.rolling(9).max() - self.low.rolling(9).min()
+        result = pd.DataFrame.ewm(100 * part1 / part2, alpha=1.0 / 3).mean()
         alpha = result.iloc[-1, :]
         return alpha.dropna()
 
@@ -711,8 +754,9 @@ class GTJA_191:
 
     ##################################################################
     def alpha_062(self):
-        volume_rank = self.volume.rank(axis=1, pct=1)
+        volume_rank = self.volume.rank(axis=0, pct=1)
         result = self.high.iloc[-5:, :].corrwith(volume_rank.iloc[-5:, :])
+        # result = self.high.iloc[-5:, :].rolling(5).corr(volume_rank)
         alpha = -result
         return alpha.dropna()
 
@@ -720,9 +764,9 @@ class GTJA_191:
 
     def alpha_063(self):
         part1 = np.maximum(self.close - self.close.shift(), 0)
-        part1 = pd.ewma(part1, alpha=1.0 / 6)
+        part1 = pd.DataFrame.ewm(part1, alpha=1.0 / 6).mean()
         part2 = (self.close - self.close.shift()).abs()
-        part2 = pd.ewma(part2, alpha=1.0 / 6)
+        part2 = pd.DataFrame.ewm(part2, alpha=1.0 / 6).mean()
         result = part1 * 100 / part2
         alpha = result.iloc[-1, :]
         return alpha.dropna()
@@ -767,9 +811,9 @@ class GTJA_191:
     def alpha_067(self):
         temp1 = self.close - self.close.shift()
         part1 = np.maximum(temp1, 0)
-        part1 = pd.ewma(part1, alpha=1.0 / 24)
+        part1 = pd.DataFrame.ewm(part1, alpha=1.0 / 24).mean()
         temp2 = temp1.abs()
-        part2 = pd.ewma(temp2, alpha=1.0 / 24)
+        part2 = pd.DataFrame.ewm(temp2, alpha=1.0 / 24).mean()
         result = part1 * 100 / part2
         alpha = result.iloc[-1, :].dropna()
         return alpha
@@ -779,7 +823,7 @@ class GTJA_191:
         part1 = (self.high + self.low) / 2 - self.high.shift()
         part2 = 0.5 * self.low.shift() * (self.high - self.low) / self.volume
         result = (part1 + part2) * 100
-        result = pd.ewma(result, alpha=2.0 / 15)
+        result = pd.DataFrame.ewm(result, alpha=2.0 / 15).mean()
         alpha = result.iloc[-1, :].dropna()
         return alpha
 
@@ -799,7 +843,8 @@ class GTJA_191:
     def alpha_071(self):
         # (CLOSE-MEAN(CLOSE,24))/MEAN(CLOSE,24)*100
         #
-        data = self.close - pd.rolling_mean(self.close, 24) / pd.rolling_mean(self.close, 24)
+        # data = self.close - pd.rolling_mean(self.close, 24) / pd.rolling_mean(self.close, 24)
+        data = self.close - self.close.rolling(24).mean() / self.close.rolling(24).mean()
         alpha = data.iloc[-1].dropna()
         return alpha
 
@@ -807,9 +852,11 @@ class GTJA_191:
     def alpha_072(self):
         # SMA((TSMAX(HIGH,6)-CLOSE)/(TSMAX(HIGH,6)-TSMIN(LOW,6))*100,15,1)
         #
-        data1 = pd.rolling_max(self.high, 6) - self.close
-        data2 = pd.rolling_max(self.high, 6) - pd.rolling_min(self.low, 6)
-        alpha = pd.ewma(data1 / data2 * 100, alpha=1 / 15).iloc[-1].dropna()
+        # data1 = pd.rolling_max(self.high, 6) - self.close
+        data1 = self.high.rolling(6).max() - self.close
+        # data2 = pd.rolling_max(self.high, 6) - pd.rolling_min(self.low, 6)
+        data2 = self.high.rolling(6).max() - self.low.rolling(6).min()
+        alpha = pd.DataFrame.ewm(data1 / data2 * 100, alpha=1 / 15).mean().iloc[-1].dropna()
         return alpha
 
     #############################################################################
@@ -850,8 +897,8 @@ class GTJA_191:
         # STD(ABS((CLOSE/DELAY(CLOSE,1)-1))/VOLUME,20)/MEAN(ABS((CLOSE/DELAY(CLOSE,1)-1))/VOLUME,20)
         #
 
-        data1 = abs((self.close / ((self.prev_close - 1) / self.volume).shift(20))).std()
-        data2 = abs((self.close / ((self.prev_close - 1) / self.volume).shift(20))).mean()
+        data1 = abs((self.close / ((self.open - 1) / self.volume).shift(20))).std()
+        data2 = abs((self.close / ((self.open - 1) / self.volume).shift(20))).mean()
         alpha = (data1 / data2).dropna()
         return alpha
 
@@ -876,10 +923,13 @@ class GTJA_191:
     def alpha_078(self):
         # ((HIGH+LOW+CLOSE)/3-MA((HIGH+LOW+CLOSE)/3,12))/(0.015*MEAN(ABS(CLOSE-MEAN((HIGH+LOW+CLOSE)/3,12)),12))
         #
-        data1 = (self.high + self.low + self.close) / 3 - pd.rolling_mean((self.high + self.low + self.close) / 3,
-                                                                          window=12)
-        data2 = abs(self.close - pd.rolling_mean((self.high + self.low + self.close) / 3, window=12))
-        data3 = pd.rolling_mean(data2, window=12) * 0.015
+        # data1 = (self.high + self.low + self.close) / 3 - pd.rolling_mean((self.high + self.low + self.close) / 3,
+        #                                                                   window=12)
+        data1 = (self.high + self.low + self.close) / 3 - ((self.high + self.low + self.close) / 3).rolling(12).mean()
+        # data2 = abs(self.close - pd.rolling_mean((self.high + self.low + self.close) / 3, window=12))
+        data2 = abs(self.close - ((self.high + self.low + self.close) / 3).rolling(12).mean())
+        # data3 = pd.rolling_mean(data2, window=12) * 0.015
+        data3 = data2.rolling(12).mean() * 0.015
         alpha = (data1 / data3).iloc[-1].dropna()
         return alpha
 
@@ -887,8 +937,8 @@ class GTJA_191:
     def alpha_079(self):
         # SMA(MAX(CLOSE-DELAY(CLOSE,1),0),12,1)/SMA(ABS(CLOSE-DELAY(CLOSE,1)),12,1)*100
         #
-        data1 = pd.ewma(np.maximum((self.close - self.prev_close), 0), alpha=1 / 12)
-        data2 = pd.ewma(abs(self.close - self.prev_close), alpha=1 / 12)
+        data1 = pd.DataFrame.ewm(np.maximum((self.close - self.open), 0), alpha=1 / 12).mean()
+        data2 = pd.DataFrame.ewm(abs(self.close - self.open), alpha=1 / 12).mean()
         alpha = (data1 / data2 * 100).iloc[-1].dropna()
         return alpha
 
@@ -901,15 +951,17 @@ class GTJA_191:
 
     #############################################################################
     def alpha_081(self):
-        result = pd.ewma(self.volume, alpha=2.0 / 21)
+        result = pd.DataFrame.ewm(self.volume, alpha=2.0 / 21).mean()
         alpha = result.iloc[-1, :].dropna()
         return alpha
 
     #############################################################################
     def alpha_082(self):
-        part1 = pd.rolling_max(self.high, 6) - self.close
-        part2 = pd.rolling_max(self.high, 6) - pd.rolling_min(self.low, 6)
-        result = pd.ewma(100 * part1 / part2, alpha=1.0 / 20)
+        # part1 = pd.rolling_max(self.high, 6) - self.close
+        part1 = self.high.rolling(6).max() - self.close
+        # part2 = pd.rolling_max(self.high, 6) - pd.rolling_min(self.low, 6)
+        part2 = self.high.rolling(6).max() - self.low.rolling(6).min()
+        result = pd.DataFrame.ewm(100 * part1 / part2, alpha=1.0 / 20).mean()
         alpha = result.iloc[-1, :].dropna()
         return alpha
 
@@ -998,7 +1050,7 @@ class GTJA_191:
     ########################################################################
     '''
 
-    def alpha_88(self):
+    def alpha_088(self):
         # (close-delay(close,20))/delay(close,20)*100
         ####################
         data1 = self.close.iloc[-21, :]
@@ -1006,17 +1058,17 @@ class GTJA_191:
         alpha = alpha.dropna()
         return alpha
 
-    def alpha_89(self):
+    def alpha_089(self):
         # 2*(sma(close,13,2)-sma(close,27,2)-sma(sma(close,13,2)-sma(close,27,2),10,2))
         ######################
-        data1 = pd.ewma(self.close, span=12, adjust=False)
-        data2 = pd.ewma(self.close, span=26, adjust=False)
-        data3 = pd.ewma(data1 - data2, span=9, adjust=False)
+        data1 = pd.DataFrame.ewm(self.close, span=12, adjust=False).mean()
+        data2 = pd.DataFrame.ewm(self.close, span=26, adjust=False).mean()
+        data3 = pd.DataFrame.ewm(data1 - data2, span=9, adjust=False).mean()
         alpha = ((data1 - data2 - data3) * 2).iloc[-1, :]
         alpha = alpha.dropna()
         return alpha
 
-    def alpha_90(self):
+    def alpha_090(self):
         # (rank(corr(rank(vwap),rank(volume),5))*-1)
         #######################
         data1 = self.avg_price.rank(axis=1, pct=True)
@@ -1027,7 +1079,7 @@ class GTJA_191:
         alpha = alpha.dropna()
         return alpha
 
-    def alpha_91(self):
+    def alpha_091(self):
         # ((rank((close-max(close,5)))*rank(corr((mean(volume,40)),low,5)))*-1)
         #################
         data1 = self.close
@@ -1042,7 +1094,7 @@ class GTJA_191:
         return alpha
 
     #
-    def alpha_92(self):
+    def alpha_092(self):
         # (MAX(RANK(DECAYLINEAR(DELTA(((CLOSE*0.35)+(VWAP*0.65)),2),3)),TSRANK(DECAYLINEAR(ABS(CORR((MEAN(VOLUME,180)),CLOSE,13)),5),15))*-1) #
         delta = (self.close * 0.35 + self.avg_price * 0.65) - (self.close * 0.35 + self.avg_price * 0.65).shift(2)
         rank1 = (pd.rolling_apply(delta, 3, self.func_decaylinear)).rank(axis=1, pct=True)
@@ -1055,7 +1107,7 @@ class GTJA_191:
         return alpha
 
     #
-    def alpha_93(self):
+    def alpha_093(self):
         # SUM((OPEN>=DELAY(OPEN,1)?0:MAX((OPEN-LOW),(OPEN-DELAY(OPEN,1)))),20) #
         cond = self.open_price >= self.open_price.shift()
         data1 = self.open_price - self.low
@@ -1068,7 +1120,7 @@ class GTJA_191:
         return alpha
 
     #
-    def alpha_94(self):
+    def alpha_094(self):
         # SUM((CLOSE>DELAY(CLOSE,1)?VOLUME:(CLOSE<DELAY(CLOSE,1)?-VOLUME:0)),30) #
         cond1 = self.close > self.prev_close
         cond2 = self.close < self.prev_close
@@ -1080,31 +1132,31 @@ class GTJA_191:
         return alpha
 
     #
-    def alpha_95(self):
+    def alpha_095(self):
         # STD(AMOUNT,20) #
         alpha = self.amount.iloc[-20:, :].std()
         alpha = alpha.dropna()
         return alpha
 
     #
-    def alpha_96(self):
+    def alpha_096(self):
         # SMA(SMA((CLOSE-TSMIN(LOW,9))/(TSMAX(HIGH,9)-TSMIN(LOW,9))*100,3,1),3,1) #
-        sma1 = pd.ewma(
+        sma1 = pd.DataFrame.ewm(
             100 * (self.close - self.low.rolling(9).min()) / (self.high.rolling(9).max() - self.low.rolling(9).min()),
-            span=5, adjust=False)
-        alpha = pd.ewma(sma1, span=5, adjust=False).iloc[-1, :]
+            span=5, adjust=False).mean()
+        alpha = pd.DataFrame.ewm(sma1, span=5, adjust=False).mean().iloc[-1, :]
         alpha = alpha.dropna()
         return alpha
 
     #
-    def alpha_97(self):
+    def alpha_097(self):
         # STD(VOLUME,10) #
         alpha = self.volume.iloc[-10:, :].std()
         alpha = alpha.dropna()
         return alpha
 
     #
-    def alpha_98(self):
+    def alpha_098(self):
         # ((((DELTA((SUM(CLOSE,100)/100),100)/DELAY(CLOSE,100))<0.05)||((DELTA((SUM(CLOSE,100)/100),100)/DELAY(CLOSE,100))==0.05))?(-1*(CLOSE-TSMIN(CLOSE,100))):(-1*DELTA(CLOSE,3))) #
         sum_close = self.close.rolling(100).sum()
         cond = (sum_close / 100 - (sum_close / 100).shift(100)) / self.close.shift(100) <= 0.05
@@ -1116,7 +1168,7 @@ class GTJA_191:
         return alpha
 
     #
-    def alpha_99(self):
+    def alpha_099(self):
         # (-1 * RANK(COVIANCE(RANK(CLOSE), RANK(VOLUME), 5))) #
         alpha = (-pd.rolling_cov(self.close.rank(axis=1, pct=True), self.volume.rank(axis=1, pct=True), window=5).rank(
             axis=1, pct=True)).iloc[-1, :]
@@ -1149,8 +1201,8 @@ class GTJA_191:
         max_cond = (self.volume - self.volume.shift()) > 0
         max_data = self.volume - self.volume.shift()
         max_data[~max_cond] = 0
-        sma1 = pd.ewma(max_data, span=11, adjust=False)
-        sma2 = pd.ewma((self.volume - self.volume.shift()).abs(), span=11, adjust=False)
+        sma1 = pd.DataFrame.ewm(max_data, span=11, adjust=False).mean()
+        sma2 = pd.DataFrame.ewm((self.volume - self.volume.shift()).abs(), span=11, adjust=False).mean()
         alpha = (sma1 / sma2 * 100).iloc[-1, :]
         alpha = alpha.dropna()
         return alpha
@@ -1211,8 +1263,8 @@ class GTJA_191:
     def alpha_109(self):
         # SMA(HIGH-LOW,10,2)/SMA(SMA(HIGH-LOW,10,2),10,2)#
         data = self.high - self.low
-        sma1 = pd.ewma(data, span=9, adjust=False)
-        sma2 = pd.ewma(sma1, span=9, adjust=False)
+        sma1 = pd.DataFrame.ewm(data, span=9, adjust=False).mean()
+        sma2 = pd.DataFrame.ewm(sma1, span=9, adjust=False).mean()
         alpha = (sma1 / sma2).iloc[-1, :]
         alpha = alpha.dropna()
         return alpha
@@ -1236,8 +1288,8 @@ class GTJA_191:
         # sma(vol*((close-low)-(high-close))/(high-low),11,2)-sma(vol*((close-low)-(high-close))/(high-low),4,2)
         ######################
         data1 = self.volume * ((self.close - self.low) - (self.high - self.close)) / (self.high - self.low)
-        x = pd.ewma(data1, span=10)
-        y = pd.ewma(data1, span=3)
+        x = pd.DataFrame.ewm(data1, span=10).mean()
+        y = pd.DataFrame.ewm(data1, span=3).mean()
         alpha = (x - y).iloc[-1, :]
         alpha = alpha.dropna()
         return alpha
@@ -1324,8 +1376,10 @@ class GTJA_191:
         ###################
         data1 = self.high - self.open_price
         data2 = self.open_price - self.low
-        data3 = pd.rolling_sum(data1, window=20)
-        data4 = pd.rolling_sum(data2, window=20)
+        # data3 = pd.rolling_sum(data1, window=20)
+        data3 = data1.rolling(20).sum()
+        # data4 = pd.rolling_sum(data2, window=20)
+        data4 = data2.rolling(20).sum()
         alpha = ((data3 / data4) * 100).iloc[-1, :]
         alpha = alpha.dropna()
         return alpha
@@ -1362,7 +1416,9 @@ class GTJA_191:
         ##### / DELAY(SMA(SMA(SMA(LOG(CLOSE),13,2),13,2),13,2),1)
         ##
         log_close = np.log(self.close)
-        data = pd.ewma(pd.ewma(pd.ewma(log_close, span=12, adjust=False), span=12, adjust=False), span=12, adjust=False)
+        data = pd.DataFrame.ewm(
+            pd.DataFrame.ewm(pd.DataFrame.ewm(log_close, span=12, adjust=False).mean(), span=12, adjust=False).mean(),
+            span=12, adjust=False).mean()
         alpha = (data.iloc[-1, :] / data.iloc[-2, :]) - 1
         alpha = alpha.dropna()
         return alpha
@@ -1486,7 +1542,7 @@ class GTJA_191:
             return na[-1] / na[-21]
 
         data1 = self.close.rolling(21).apply(rolling_div).shift(periods=1)
-        alpha = pd.ewma(data1, com=19, adjust=False).iloc[-1, :]
+        alpha = pd.DataFrame.ewm(data1, com=19, adjust=False).mean().iloc[-1, :]
         alpha = alpha.dropna()
         return alpha
 
@@ -2105,47 +2161,177 @@ class GTJA_191:
     def alpha_191(self):
         ##### (CORR(MEAN(VOLUME,20), LOW, 5) + ((HIGH + LOW) / 2)) - CLOSE ####
 
-        volume_avg = pd.rolling_mean(self.volume, window=20)
+        # volume_avg = pd.rolling_mean(self.volume, window=20)
+        volume_avg = self.volume.rolling(window=20).mean()
         corr = volume_avg.iloc[-5:, :].corrwith(self.low.iloc[-5:, :])
         alpha = corr + (self.high.iloc[-1, :] + self.low.iloc[-1, :]) / 2 - self.close.iloc[-1, :]
         alpha = alpha.dropna()
         return alpha
 
 
-if __name__ == "__main__":
-    df = pd.DataFrame({"open": {"1662336000000": 9.21, "1662422400000": 9.17, "1662508800000": 9.2,
-                                "1662595200000": 9.18, "1662681600000": 9.08, "1663027200000": 9.18},
-                       "close": {"1662336000000": 9.16, "1662422400000": 9.18, "1662508800000": 9.19,
-                                 "1662595200000": 9.04, "1662681600000": 9.18, "1663027200000": 9.19},
-                       "low": {"1662336000000": 9.08, "1662422400000": 9.12, "1662508800000": 9.15,
-                               "1662595200000": 9.02, "1662681600000": 9.0, "1663027200000": 9.16},
-                       "high": {"1662336000000": 9.23, "1662422400000": 9.23, "1662508800000": 9.28,
-                                "1662595200000": 9.18, "1662681600000": 9.22, "1663027200000": 9.27},
-                       "volume": {"1662336000000": 16401963.0, "1662422400000": 14872417.0, "1662508800000": 17890802.0,
-                                  "1662595200000": 20588100.0, "1662681600000": 17528332.0,
-                                  "1663027200000": 12207627.0},
-                       "money": {"1662336000000": 149616887.0, "1662422400000": 136269683.0,
-                                 "1662508800000": 164806543.0, "1662595200000": 186522511.0,
-                                 "1662681600000": 159812287.0, "1663027200000": 112234792.0},
-                       "factor": {"1662336000000": 1.0, "1662422400000": 1.0, "1662508800000": 1.0,
-                                  "1662595200000": 1.0, "1662681600000": 1.0, "1663027200000": 1.0},
-                       "high_limit": {"1662336000000": 10.19, "1662422400000": 10.08, "1662508800000": 10.1,
-                                      "1662595200000": 10.11, "1662681600000": 9.94, "1663027200000": 10.1},
-                       "low_limit": {"1662336000000": 8.33, "1662422400000": 8.24, "1662508800000": 8.26,
-                                     "1662595200000": 8.27, "1662681600000": 8.14, "1663027200000": 8.26},
-                       "avg": {"1662336000000": 9.122, "1662422400000": 9.163, "1662508800000": 9.212,
-                               "1662595200000": 9.06, "1662681600000": 9.117, "1663027200000": 9.194},
-                       "pre_close": {"1662336000000": 9.26, "1662422400000": 9.16, "1662508800000": 9.18,
-                                     "1662595200000": 9.19, "1662681600000": 9.04, "1663027200000": 9.18},
-                       "paused": {"1662336000000": 0.0, "1662422400000": 0.0, "1662508800000": 0.0,
-                                  "1662595200000": 0.0, "1662681600000": 0.0, "1663027200000": 0.0}})
-    df["pct_chg"] = (df["close"] - df["open"]) / df["open"]
-    df.index = pd.to_datetime(df.index, unit='ms')
-    a = GTJA_191(df)
-    x1 = a.alpha_001()
-    print(df)
-    print(df['volume'])
-    print(x1)
-    print(1)
+def get_func_map(a):
+    return {
+        "alpha_002": a.alpha_002,
+        "alpha_003": a.alpha_003,
+        "alpha_004": a.alpha_004,
+        "alpha_005": a.alpha_005,
+        "alpha_009": a.alpha_009,
+        "alpha_011": a.alpha_011,
+        "alpha_014": a.alpha_014,
+        "alpha_018": a.alpha_018,
+        "alpha_019": a.alpha_019,
+        "alpha_020": a.alpha_020,
+        "alpha_022": a.alpha_022,
+        "alpha_023": a.alpha_023,
+        "alpha_024": a.alpha_024,
+        "alpha_028": a.alpha_028,
+        "alpha_029": a.alpha_029,
+        "alpha_031": a.alpha_031,
+        "alpha_034": a.alpha_034,
+        "alpha_038": a.alpha_038,
+        "alpha_040": a.alpha_040,
+        "alpha_042": a.alpha_042,
+        "alpha_043": a.alpha_043,
+        "alpha_046": a.alpha_046,
+        "alpha_047": a.alpha_047,
+        "alpha_049": a.alpha_049,
+        "alpha_052": a.alpha_052,
+        "alpha_053": a.alpha_053,
+        "alpha_054": a.alpha_054,
+        "alpha_057": a.alpha_057,
+        "alpha_058": a.alpha_058,
+        "alpha_059": a.alpha_059,
+        "alpha_060": a.alpha_060,
+        "alpha_063": a.alpha_063,
+        "alpha_065": a.alpha_065,
+        "alpha_066": a.alpha_066,
+        "alpha_067": a.alpha_067,
+        "alpha_068": a.alpha_068,
+        "alpha_071": a.alpha_071,
+        "alpha_072": a.alpha_072,
+        "alpha_076": a.alpha_076,
+        "alpha_078": a.alpha_078,
+        "alpha_079": a.alpha_079,
+        "alpha_080": a.alpha_080,
+        "alpha_081": a.alpha_081,
+        "alpha_082": a.alpha_082,
+        "alpha_084": a.alpha_084,
+        "alpha_086": a.alpha_086,
+        "alpha_088": a.alpha_088,
+        "alpha_089": a.alpha_089,
+        "alpha_093": a.alpha_093,
+        "alpha_096": a.alpha_096,
+        "alpha_097": a.alpha_097,
+        "alpha_098": a.alpha_098,
+        "alpha_100": a.alpha_100,
+        "alpha_102": a.alpha_102,
+        "alpha_103": a.alpha_103,
+        "alpha_106": a.alpha_106,
+        "alpha_109": a.alpha_109,
+        "alpha_111": a.alpha_111,
+        "alpha_116": a.alpha_116,
+        "alpha_118": a.alpha_118,
+        "alpha_126": a.alpha_126,
+        "alpha_129": a.alpha_129,
+        "alpha_133": a.alpha_133,
+        "alpha_134": a.alpha_134,
+        "alpha_139": a.alpha_139,
+        "alpha_145": a.alpha_145,
+        "alpha_150": a.alpha_150,
+    }
 
-    # g = GTJA_191("2022-09-13", "399981.XSHE")
+
+if __name__ == "__main__":
+    import libs.common as common
+    import pandas as pd
+
+    # df = pd.DataFrame({"open":{"1662076800000":9.17,"1662336000000":9.21,"1662422400000":9.17,"1662508800000":9.2,"1662595200000":9.18,"1662681600000":9.08,"1663027200000":9.18},"close":{"1662076800000":9.26,"1662336000000":9.16,"1662422400000":9.18,"1662508800000":9.19,"1662595200000":9.04,"1662681600000":9.18,"1663027200000":9.19},"low":{"1662076800000":9.12,"1662336000000":9.08,"1662422400000":9.12,"1662508800000":9.15,"1662595200000":9.02,"1662681600000":9.0,"1663027200000":9.16},"high":{"1662076800000":9.33,"1662336000000":9.23,"1662422400000":9.23,"1662508800000":9.28,"1662595200000":9.18,"1662681600000":9.22,"1663027200000":9.27},"avg":{"1662076800000":9.217,"1662336000000":9.122,"1662422400000":9.163,"1662508800000":9.212,"1662595200000":9.06,"1662681600000":9.117,"1663027200000":9.194},"volume":{"1662076800000":16662399.0,"1662336000000":16401963.0,"1662422400000":14872417.0,"1662508800000":17890802.0,"1662595200000":20588100.0,"1662681600000":17528332.0,"1663027200000":12207627.0}})
+    # df["pct_chg"] = (df["close"] - df["open"]) / df["open"]
+
+    # df.index = pd.to_datetime(df.index, unit='ms')
+    # df = df.transpose()
+
+    # auth("18983287546", "Wang921207")
+    # # df = get_price('601021.XSHG', None, "2022-09-13", '1d',
+    # #                                ['open', 'close', 'low', 'high', 'avg', 'volume'], count=333)
+    # from service.data import df_data
+    #
+    # symbol = '601021.XSHG'
+    # df = df_data
+    #
+    # df.index = pd.to_datetime(df.index, unit='ms')
+    # a = GTJA_191(df, symbol)
+    # x1 = a.alpha_001()
+    # x5 = a.alpha_032()
+    # x6 = alpha191.alpha_032(symbol, "2022-09-13")
+    #
+    symbol_list = ["sh600000", "sh600004", "sh600006", "sh600007", "sh600008", "sh600009", "sh600010", "sh600011",
+                   "sh600012", "sh600015", "sh600016", "sh600017", "sh600018", "sh600019", "sh600020", "sh600021",
+                   "sh600022", "sh600023", "sh600025", "sh600026", "sh600027", "sh600028", "sh600029", "sh600030",
+                   "sh600031", "sh600032", "sh600033", "sh600035", "sh600036", "sh600037", "sh600038", "sh600039",
+                   "sh600048", "sh600050", "sh600051", "sh600052", "sh600053", "sh600054", "sh600055", "sh600056",
+                   "sh600057", "sh600058", "sh600059", "sh600060", "sh600061", "sh600062", "sh600063", "sh600064",
+                   "sh600066", "sh600067", "sh600070", "sh600071", "sh600072", "sh600073", "sh600075", "sh600076",
+                   "sh600077", "sh600078", "sh600079", "sh600080", "sh600081", "sh600082", "sh600083", "sh600084",
+                   "sh600085", "sh600088", "sh600089", "sh600094", "sh600095", "sh600096", "sh600097", "sh600098",
+                   "sh600099", "sh600100", "sh600101", "sh600103", "sh600104", "sh600105", "sh600106", "sh600107",
+                   "sh600108", "sh600109", "sh600110", "sh600111", "sh600112", "sh600113", "sh600114", "sh600115",
+                   "sh600116", "sh600117", "sh600118", "sh600119", "sh600120", "sh600121", "sh600122", "sh600123",
+                   "sh600125", "sh600126", "sh600127", "sh600128", "sh600129", "sh600130", "sh600131", "sh600132",
+                   "sh600133", "sh600135", "sh600136", "sh600137", "sh600138", "sh600139", "sh600141", "sh600143",
+                   "sh600148", "sh600149", "sh600150", "sh600151", "sh600152", "sh600153", "sh600155", "sh600156",
+                   "sh600157", "sh600158", "sh600159", "sh600160", "sh600161", "sh600162", "sh600163", "sh600165",
+                   "sh600166", "sh600167", "sh600168", "sh600169", "sh600170", "sh600171", "sh600172", "sh600173",
+                   "sh600176", "sh600177", "sh600178", "sh600179", "sh600180", "sh600182", "sh600183", "sh600184",
+                   "sh600185", "sh600186", "sh600187", "sh600188", "sh600189", "sh600190", "sh600191", "sh600192",
+                   "sh600193", "sh600195", "sh600196", "sh600197", "sh600198", "sh600199", "sh600200", "sh600201",
+                   "sh600202", "sh600203", "sh600206", "sh600207", "sh600208", "sh600210", "sh600211", "sh600212",
+                   "sh600213", "sh600215", "sh600216", "sh600217", "sh600218", "sh600219", "sh600220", "sh600221",
+                   "sh600222", "sh600223", "sh600225", "sh600226", "sh600227", "sh600228", "sh600229", "sh600230",
+                   "sh600231", "sh600232", "sh600233", "sh600234", "sh600235", "sh600236", "sh600237", "sh600238",
+                   "sh600239", "sh600241", "sh600242", "sh600243", "sh600246", "sh600248", "sh600249", "sh601021",
+                   "sz000001"]
+    # symbol_list = ["sh600000"]
+    for symbol in symbol_list:
+        columns = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'outstanding_share', 'turnover']
+        # symbol = "sz000001"
+        table_name = "stock_zh_a_daily"
+        search_sql = "where `symbol` = '{}'".format(symbol)
+        sql = " SELECT %s FROM `%s` %s" % (','.join(columns),
+                                           table_name, search_sql)
+        result = common.select(sql)
+        df = pd.DataFrame(list(result), columns=columns)
+        print(symbol)
+
+        rslt = pd.DataFrame()
+        for i, rows in df.iterrows():
+            date = rows.date
+            cal_df = df[:int(i) + 1]
+            print(i)
+            a = GTJA_191(cal_df, symbol)
+            func_map = get_func_map(a)
+            row_rslt = pd.DataFrame(data=[date], columns=['date'], index=[symbol])
+            for name, func in func_map.items():
+                try:
+                    alpha_rslt = func()
+                except Exception as e:
+                    logging.exception(e)
+                    continue
+                try:
+                    if rslt is None:
+                        alpha_rslt.name = name
+                        row_rslt = alpha_rslt
+                    if isinstance(alpha_rslt, int) and alpha_rslt == 0:
+                        row_rslt[name] = 0
+                    else:
+                        alpha_rslt.name = name
+                        row_rslt = pd.concat([row_rslt, alpha_rslt], axis=1)
+                except Exception as e:
+                    logging.exception(e)
+            rslt = pd.concat([rslt, row_rslt], axis=0)
+        rslt["symbol"] = symbol
+
+        common.insert_db(rslt, "stock_alpha_191", True, "`id`")
+        # rslt = rslt.reset_index()
+        print(11111)
+    print(123123123)
