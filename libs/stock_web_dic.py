@@ -79,36 +79,59 @@ STOCK_WEB_DATA_LIST.append(
         order_by=" symbol asc "
     )
 )
+#
+# STOCK_WEB_DATA_LIST.append(
+#     StockWebData(
+#         mode="query",
+#         type="1，股票基本数据",
+#         name="GTJA_191",
+#         table_name="stock_alpha_191",
+#         columns=['date', 'symbol', 'alpha_002', 'alpha_003', 'alpha_004', 'alpha_005', 'alpha_009', 'alpha_011',
+#                  'alpha_014', 'alpha_018', 'alpha_019', 'alpha_020', 'alpha_022', 'alpha_023', 'alpha_024', 'alpha_028',
+#                  'alpha_029', 'alpha_031', 'alpha_034', 'alpha_038', 'alpha_040', 'alpha_042', 'alpha_043', 'alpha_046',
+#                  'alpha_047', 'alpha_049', 'alpha_052', 'alpha_053', 'alpha_054', 'alpha_057', 'alpha_058', 'alpha_059',
+#                  'alpha_060', 'alpha_063', 'alpha_065', 'alpha_066', 'alpha_067', 'alpha_068', 'alpha_071', 'alpha_072',
+#                  'alpha_076', 'alpha_078', 'alpha_079', 'alpha_080', 'alpha_081', 'alpha_082', 'alpha_084', 'alpha_086',
+#                  'alpha_088', 'alpha_089', 'alpha_093', 'alpha_096', 'alpha_097', 'alpha_098', 'alpha_100', 'alpha_102',
+#                  'alpha_103', 'alpha_106', 'alpha_109', 'alpha_111', 'alpha_116', 'alpha_118', 'alpha_126', 'alpha_129',
+#                  'alpha_133', 'alpha_134', 'alpha_139', 'alpha_145', 'alpha_150'],
+#         column_names=['日期', '代码', 'alpha_002', 'alpha_003', 'alpha_004', 'alpha_005', 'alpha_009', 'alpha_011',
+#                       'alpha_014', 'alpha_018', 'alpha_019', 'alpha_020', 'alpha_022', 'alpha_023', 'alpha_024',
+#                       'alpha_028', 'alpha_029', 'alpha_031', 'alpha_034', 'alpha_038', 'alpha_040', 'alpha_042',
+#                       'alpha_043', 'alpha_046', 'alpha_047', 'alpha_049', 'alpha_052', 'alpha_053', 'alpha_054',
+#                       'alpha_057', 'alpha_058', 'alpha_059', 'alpha_060', 'alpha_063', 'alpha_065', 'alpha_066',
+#                       'alpha_067', 'alpha_068', 'alpha_071', 'alpha_072', 'alpha_076', 'alpha_078', 'alpha_079',
+#                       'alpha_080', 'alpha_081', 'alpha_082', 'alpha_084', 'alpha_086', 'alpha_088', 'alpha_089',
+#                       'alpha_093', 'alpha_096', 'alpha_097', 'alpha_098', 'alpha_100', 'alpha_102', 'alpha_103',
+#                       'alpha_106', 'alpha_109', 'alpha_111', 'alpha_116', 'alpha_118', 'alpha_126', 'alpha_129',
+#                       'alpha_133', 'alpha_134', 'alpha_139', 'alpha_145', 'alpha_150'],
+#         primary_key=[],
+#         order_by=" symbol asc "
+#     )
+# )
 
-STOCK_WEB_DATA_LIST.append(
-    StockWebData(
-        mode="query",
-        type="1，股票基本数据",
-        name="GTJA_191",
-        table_name="stock_alpha_191",
-        columns=['date', 'symbol', 'alpha_002', 'alpha_003', 'alpha_004', 'alpha_005', 'alpha_009', 'alpha_011',
-                 'alpha_014', 'alpha_018', 'alpha_019', 'alpha_020', 'alpha_022', 'alpha_023', 'alpha_024', 'alpha_028',
-                 'alpha_029', 'alpha_031', 'alpha_034', 'alpha_038', 'alpha_040', 'alpha_042', 'alpha_043', 'alpha_046',
-                 'alpha_047', 'alpha_049', 'alpha_052', 'alpha_053', 'alpha_054', 'alpha_057', 'alpha_058', 'alpha_059',
-                 'alpha_060', 'alpha_063', 'alpha_065', 'alpha_066', 'alpha_067', 'alpha_068', 'alpha_071', 'alpha_072',
-                 'alpha_076', 'alpha_078', 'alpha_079', 'alpha_080', 'alpha_081', 'alpha_082', 'alpha_084', 'alpha_086',
-                 'alpha_088', 'alpha_089', 'alpha_093', 'alpha_096', 'alpha_097', 'alpha_098', 'alpha_100', 'alpha_102',
-                 'alpha_103', 'alpha_106', 'alpha_109', 'alpha_111', 'alpha_116', 'alpha_118', 'alpha_126', 'alpha_129',
-                 'alpha_133', 'alpha_134', 'alpha_139', 'alpha_145', 'alpha_150'],
-        column_names=['日期', '代码', 'alpha_002', 'alpha_003', 'alpha_004', 'alpha_005', 'alpha_009', 'alpha_011',
-                      'alpha_014', 'alpha_018', 'alpha_019', 'alpha_020', 'alpha_022', 'alpha_023', 'alpha_024',
-                      'alpha_028', 'alpha_029', 'alpha_031', 'alpha_034', 'alpha_038', 'alpha_040', 'alpha_042',
-                      'alpha_043', 'alpha_046', 'alpha_047', 'alpha_049', 'alpha_052', 'alpha_053', 'alpha_054',
-                      'alpha_057', 'alpha_058', 'alpha_059', 'alpha_060', 'alpha_063', 'alpha_065', 'alpha_066',
-                      'alpha_067', 'alpha_068', 'alpha_071', 'alpha_072', 'alpha_076', 'alpha_078', 'alpha_079',
-                      'alpha_080', 'alpha_081', 'alpha_082', 'alpha_084', 'alpha_086', 'alpha_088', 'alpha_089',
-                      'alpha_093', 'alpha_096', 'alpha_097', 'alpha_098', 'alpha_100', 'alpha_102', 'alpha_103',
-                      'alpha_106', 'alpha_109', 'alpha_111', 'alpha_116', 'alpha_118', 'alpha_126', 'alpha_129',
-                      'alpha_133', 'alpha_134', 'alpha_139', 'alpha_145', 'alpha_150'],
-        primary_key=[],
-        order_by=" symbol asc "
+factor_list = ['alpha_002', 'alpha_003', 'alpha_004', 'alpha_005', 'alpha_009', 'alpha_011',
+               'alpha_014', 'alpha_018', 'alpha_019', 'alpha_020', 'alpha_022', 'alpha_023', 'alpha_024', 'alpha_028',
+               'alpha_029', 'alpha_031', 'alpha_034', 'alpha_038', 'alpha_040', 'alpha_042', 'alpha_043', 'alpha_046',
+               'alpha_047', 'alpha_049', 'alpha_052', 'alpha_053', 'alpha_054', 'alpha_057', 'alpha_058', 'alpha_059',
+               'alpha_060', 'alpha_063', 'alpha_065', 'alpha_066', 'alpha_067', 'alpha_068', 'alpha_071', 'alpha_072',
+               'alpha_076', 'alpha_078', 'alpha_079', 'alpha_080', 'alpha_081', 'alpha_082', 'alpha_084', 'alpha_086',
+               'alpha_088', 'alpha_089', 'alpha_093', 'alpha_096', 'alpha_097', 'alpha_098', 'alpha_100', 'alpha_102',
+               'alpha_103', 'alpha_106', 'alpha_109', 'alpha_111', 'alpha_116', 'alpha_118', 'alpha_126', 'alpha_129',
+               'alpha_133', 'alpha_134', 'alpha_139', 'alpha_145', 'alpha_150']
+for f in factor_list:
+    STOCK_WEB_DATA_LIST.append(
+        StockWebData(
+            mode="query",
+            type="1，股票基本数据",
+            name=f,
+            table_name=f,
+            columns=['date', 'symbol', f],
+            column_names=['日期', '代码', f],
+            primary_key=[],
+            order_by=" symbol desc "
+        )
     )
-)
 
 # 每日股票指标lite猜想买入。
 STOCK_WEB_DATA_LIST.append(

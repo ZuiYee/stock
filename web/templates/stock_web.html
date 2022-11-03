@@ -110,26 +110,27 @@
 			onSelect: function(selected,evnt) {
 				 console.log(selected);
 			}
-        }).on('changeDate', function(ev){
-			$('input.column_filter').click();//触发搜索
-		});
+        }).on('changeDate', function (ev) {
+            $('input.column_filter').click();//触发搜索
+        });
 
 
-		var nameParam = $.getUrlVar('table_name');
-		//console.log(nameParam);
-		var myTable = $('#dynamic-table').DataTable( {
-			"select": true,
-			"bFilter": true,
-			"ordering": true,
-			"processing": true,
-			"serverSide": true,
-			"lengthMenu": [[20, 30, 50, 100,1000, -1], [20, 30, 50, 100,1000, "All"]],
-			"language": {
+        var nameParam = $.getUrlVar('table_name');
+        //console.log(nameParam);
+        var myTable = $('#dynamic-table').DataTable({
+            "select": true,
+            "bFilter": true,
+            "ordering": false,
+            "processing": true,
+            "serverSide": true,
+            "info": true,
+            "lengthMenu": [[20, 30, 50, 100, 1000, -1], [20, 30, 50, 100, 1000, "All"]],
+            "language": {
                 "url": "/static/js/datatables.Chinese.json"
             },
-			"ajax": "/stock/api_data?name="+nameParam,
-			"columns": [
-				{% for column in stockWeb.columns %}
+            "ajax": "/stock/api_data?name=" + nameParam,
+            "columns": [
+                {% for column in stockWeb.columns %}
 					{ "data": "{{ column }}" },
 				{% end %}
         	]
@@ -137,39 +138,86 @@
 
 		$('input.column_filter').on( 'keyup click', function () {
 			var i =  $(this).parents('div').attr('data-column') ;
-			//console.log(i,"val:",$(this).val());
-			myTable.column(i).search(
-				$(this).val()
-			).draw();
-		});
+            //console.log(i,"val:",$(this).val());
+            myTable.column(i).search(
+                $(this).val()
+            ).draw();
+        });
 
-		$('input.column_filter').click();//第一次点击执行，读取时间信息。
+        $('input.column_filter').click();//第一次点击执行，读取时间信息。
 
-		$.fn.dataTable.Buttons.defaults.dom.container.className = 'dt-buttons btn-overlap btn-group btn-overlap';
+        $.fn.dataTable.Buttons.defaults.dom.container.className = 'dt-buttons btn-overlap btn-group btn-overlap';
 
-		new $.fn.dataTable.Buttons( myTable, {
-			buttons: [
-			  {
-				"extend": "copy",
-				"text": "<i class='fa fa-copy bigger-110 pink'></i> <span class='hidden'>Copy to clipboard</span>",
-				"className": "btn btn-white btn-primary btn-bold"
-			  },
-			  {
-				"extend": "csv",
-				"text": "<i class='fa fa-database bigger-110 orange'></i> <span class='hidden'>Export to CSV</span>",
-				"className": "btn btn-white btn-primary btn-bold"
-			  },
-			  {
-				"extend": "print",
-				"text": "<i class='fa fa-print bigger-110 grey'></i> <span class='hidden'>Print</span>",
-				"className": "btn btn-white btn-primary btn-bold",
-				autoPrint: false,
-				message: 'This print was produced using the Print button for DataTables'
-			  }
-			]
-		} );
-		myTable.buttons().container().appendTo( $('.tableTools-container') );
 
-	})
+        $.fn.dataTable.ext.buttons.download = {
+            className: 'buttons-download',
+
+            action: function () {
+                var filter = [];
+                $('input.column_filter').each(function () {
+                    {#alert($(this).val());  #}
+                    filter.push($(this).val())
+                })
+
+                $.ajax({
+                    type: "GET",
+                    url: "/stock/factory_data?name=" + nameParam,
+                    data: {
+                        "filter": filter
+                    }, //传入组装的参数
+                    success: function (response, status, xhr) {
+                        // 响应数据作为二进制大对象
+                        let blob = new Blob([response], {type: "octet/stream"});  // 二进制大对象
+                        let filename = decodeURIComponent(xhr.getResponseHeader("Content-Disposition").split("filename=")[1].split(";")[0]);  // 文件名
+
+
+                        let link = document.createElement("a");
+                        //文件名
+                        link.download = filename;
+                        link.style.display = "none"
+                        link.href = URL.createObjectURL(blob);
+                        document.body.appendChild(link);
+                        link.click();//执行下载
+                        URL.revokeObjectURL(link.href);//释放url
+                        document.body.removeChild(link);//释放标签
+
+
+                    },
+                    error: function (a, b, c) {
+                        alert("请求失败：" + b);
+                    }
+                });
+            }
+        };
+
+        new $.fn.dataTable.Buttons(myTable, {
+            buttons: [
+                {
+                    "extend": "copy",
+                    "text": "<i class='fa fa-copy bigger-110 pink'></i> <span class='hidden'>Copy to clipboard</span>",
+                    "className": "btn btn-white btn-primary btn-bold"
+                },
+                {
+                    "extend": "csv",
+                    "text": "<i class='fa fa-database bigger-110 orange'></i> <span class='hidden'>Export to CSV</span>",
+                    "className": "btn btn-white btn-primary btn-bold"
+                },
+                {
+                    "extend": "print",
+                    "text": "<i class='fa fa-print bigger-110 grey'></i> <span class='hidden'>Print</span>",
+                    "className": "btn btn-white btn-primary btn-bold",
+                    autoPrint: false,
+                    message: 'This print was produced using the Print button for DataTables'
+                }
+                , {
+                    "extend": "download",
+                    "text": "<i class='fa fa-print bigger-110 pink2'></i> <span class='hidden'>Download</span>",
+                    "className": "btn btn-white btn-primary btn-bold",
+                }
+            ]
+        });
+        myTable.buttons().container().appendTo($('.tableTools-container'));
+
+    })
 </script>
 {% end %}

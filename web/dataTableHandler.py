@@ -8,6 +8,9 @@ import libs.stock_web_dic as stock_web_dic
 import web.base as webBase
 import logging
 import datetime
+import logging
+import pandas
+import pandas as pd
 
 # info 蓝色 云财经
 # success 绿色
@@ -27,6 +30,16 @@ WEB_EASTMONEY_URL = u"""
     """
 # 和在dic中的字符串一致。字符串前面都不特别声明是u""
 eastmoney_name = "查看股票"
+
+
+def trans_NAN_to_None(df):
+    try:
+        import numpy as np
+        df = df.astype(object).where(pandas.notnull(df), None)
+    except Exception as e:
+        logging.exception(e)
+        pass
+    return df
 
 
 # 获得页面数据。
@@ -76,7 +89,12 @@ class GetStockDataHandler(webBase.BaseHandler):
         type_param = self.get_argument("type", default=None, strip=False)
 
         stock_web = stock_web_dic.STOCK_WEB_DATA_MAP[name_param]
-
+        if name_param in stock_web_dic.factor_list:
+            select_header = ",".join(stock_web.columns)
+            table_name = "stock_alpha_191"
+        else:
+            select_header = "*"
+            table_name = stock_web.table_name
         # https://datatables.net/manual/server-side
         self.set_header('Content-Type', 'application/json;charset=UTF-8')
         order_by_column = []
@@ -141,9 +159,9 @@ class GetStockDataHandler(webBase.BaseHandler):
         limit_sql = ""
         if int(length_param) > 0:
             limit_sql = " LIMIT %s , %s " % (start_param, length_param)
-        sql = " SELECT * FROM `%s` %s %s %s " % (
-            stock_web.table_name, search_sql, order_by_sql, limit_sql)
-        count_sql = " SELECT count(1) as num FROM `%s` %s " % (stock_web.table_name, search_sql)
+        sql = " SELECT %s FROM `%s` %s %s %s " % (select_header,
+                                                  table_name, search_sql, order_by_sql, limit_sql)
+        count_sql = " SELECT count(1) as num FROM `%s` %s " % (table_name, search_sql)
 
         logging.info("select sql : " + sql)
         logging.info("count sql : " + count_sql)
@@ -189,11 +207,7 @@ class GetStockDataHandler(webBase.BaseHandler):
         # logging.info(obj)
         self.write(json.dumps(obj))
 
-
-# 获得股票历史全部数据内容。
-class GetStockAllDataHandler(webBase.BaseHandler):
-    def get(self):
-
+    def stock_alpha(self):
         # 获得分页参数。
         start_param = self.get_argument("start", default=0, strip=False)
         length_param = self.get_argument("length", default=10, strip=False)
@@ -276,42 +290,168 @@ class GetStockAllDataHandler(webBase.BaseHandler):
         logging.info("count sql : " + count_sql)
         stock_web_list = self.db.query(sql)
 
-        for tmp_obj in (stock_web_list):
-            logging.info("####################")
-            if type_param == "editor":
-                tmp_obj["DT_RowId"] = tmp_obj[stock_web.columns[0]]
-            # logging.info(tmp_obj)
-            try:
-                # 增加columns 字段中的【东方财富】
-                logging.info("eastmoney_name : %s " % eastmoney_name)
-                if eastmoney_name in stock_web.column_names:
-                    tmp_idx = stock_web.column_names.index(eastmoney_name)
-
-                    code_tmp = tmp_obj["code"]
-                    # 判断上海还是 深圳，东方财富 接口要求。
-                    if code_tmp.startswith("6"):
-                        code_tmp = "SH" + code_tmp
-                    else:
-                        code_tmp = "SZ" + code_tmp
-
-                    tmp_url = WEB_EASTMONEY_URL % (tmp_obj["code"], tmp_obj["code"], code_tmp)
-                    tmp_obj["eastmoney_url"] = tmp_url
-                    logging.info(tmp_idx)
-                    logging.info(tmp_obj["eastmoney_url"])
-                    # logging.info(type(tmp_obj))
-                    # tmp.column_names.insert(tmp_idx, eastmoney_name)
-            except Exception as e:
-                print("error :", e)
+        # for tmp_obj in (stock_web_list):
+        #     logging.info("####################")
+        #     if type_param == "editor":
+        #         tmp_obj["DT_RowId"] = tmp_obj[stock_web.columns[0]]
+        #     # logging.info(tmp_obj)
+        #     try:
+        #         # 增加columns 字段中的【东方财富】
+        #         logging.info("eastmoney_name : %s " % eastmoney_name)
+        #         if eastmoney_name in stock_web.column_names:
+        #             tmp_idx = stock_web.column_names.index(eastmoney_name)
+        #
+        #             code_tmp = tmp_obj["code"]
+        #             # 判断上海还是 深圳，东方财富 接口要求。
+        #             if code_tmp.startswith("6"):
+        #                 code_tmp = "SH" + code_tmp
+        #             else:
+        #                 code_tmp = "SZ" + code_tmp
+        #
+        #             tmp_url = WEB_EASTMONEY_URL % (tmp_obj["code"], tmp_obj["code"], code_tmp)
+        #             tmp_obj["eastmoney_url"] = tmp_url
+        #             logging.info(tmp_idx)
+        #             logging.info(tmp_obj["eastmoney_url"])
+        #             # logging.info(type(tmp_obj))
+        #             # tmp.column_names.insert(tmp_idx, eastmoney_name)
+        #     except Exception as e:
+        #         print("error :", e)
 
         stock_web_size = self.db.query(count_sql)
         logging.info("stockWebList size : %s " % stock_web_size)
+        import pandas as pd
+        df = pd.DataFrame(stock_web_list)
+        df = df.pivot_table(['data'], index=['date'], columns=['symbol'])
+        df = trans_NAN_to_None(df)
+        new_stock_web_list = [{k: v for k, v in zip(df['data'].columns, value)} for value in df['data'].values]
 
         obj = {
             "draw": 0,
             "recordsTotal": stock_web_size[0]["num"],
             "recordsFiltered": stock_web_size[0]["num"],
-            "data": stock_web_list
+            "data": new_stock_web_list
         }
+
         # logging.info("####################")
         # logging.info(obj)
         self.write(json.dumps(obj))
+
+
+# 获得股票历史全部数据内容。
+class GetStockFactoryDataHandler(webBase.BaseHandler):
+    def get(self):
+
+        # 获得分页参数。
+        start_param = self.get_argument("start", default=0, strip=False)
+        length_param = self.get_argument("length", default=-1, strip=False)
+        print("page param:", length_param, start_param)
+
+        name_param = self.get_argument("name", default=None, strip=False)
+        type_param = self.get_argument("type", default=None, strip=False)
+
+        stock_web = stock_web_dic.STOCK_WEB_DATA_MAP[name_param]
+        if name_param in stock_web_dic.factor_list:
+            select_header = ",".join(stock_web.columns)
+            table_name = "stock_alpha_191"
+        else:
+            select_header = "*"
+            table_name = stock_web.table_name
+        # https://datatables.net/manual/server-side
+        self.set_header('Content-Type', 'application/json;charset=UTF-8')
+        order_by_column = []
+        order_by_dir = []
+        # 支持多排序。使用shift+鼠标左键。
+        for item, val in self.request.arguments.items():
+            # logging.info("item: %s, val: %s" % (item, val) )
+            if str(item).startswith("order["):
+                print("order:", item, ",val:", val[0])
+            if str(item).startswith("order[") and str(item).endswith("[column]"):
+                order_by_column.append(int(val[0]))
+            if str(item).startswith("order[") and str(item).endswith("[dir]"):
+                order_by_dir.append(val[0].decode("utf-8"))  # bytes转换字符串
+
+        search_by_column = []
+        search_by_data = []
+
+        # 返回search字段。
+        for item, val in self.request.arguments.items():
+            # logging.info("item: %s, val: %s" % (item, val))
+            if str(item).startswith("columns[") and str(item).endswith("[search][value]"):
+                logging.info("item: %s, val: %s" % (item, val))
+                str_idx = item.replace("columns[", "").replace("][search][value]", "")
+                int_idx = int(str_idx)
+                # 找到字符串
+                str_val = val[0].decode("utf-8")
+                if str_val != "":  # 字符串。
+                    search_by_column.append(stock_web.columns[int_idx])
+                    search_by_data.append(val[0].decode("utf-8"))  # bytes转换字符串
+            if "filter" in item:
+                for i, v in enumerate(val):
+                    str_val = v.decode("utf-8")
+                    if str_val != "":  # 字符串。
+                        search_by_column.append(stock_web.columns[i])
+                        search_by_data.append(v.decode("utf-8"))  # bytes转换字符串
+
+        # 打印日志。
+        search_sql = ""
+        search_idx = 0
+        logging.info(search_by_column)
+        logging.info(search_by_data)
+        for item in search_by_column:
+            val = search_by_data[search_idx]
+            logging.info("idx: %s, column: %s, value: %s " % (search_idx, item, val))
+            # 查询sql
+            if search_idx == 0:
+                search_sql = " WHERE `%s` = '%s' " % (item, val)
+            else:
+                search_sql = search_sql + " AND `%s` = '%s' " % (item, val)
+            search_idx = search_idx + 1
+
+        # print("stockWeb :", stock_web)
+        order_by_sql = ""
+        # 增加排序。
+        if len(order_by_column) != 0 and len(order_by_dir) != 0:
+            order_by_sql = "  ORDER BY "
+            idx = 0
+            for key in order_by_column:
+                # 找到排序字段和dir。
+                col_tmp = stock_web.columns[key]
+                dir_tmp = order_by_dir[idx]
+                if idx != 0:
+                    order_by_sql += " ,cast(`%s` as decimal) %s" % (col_tmp, dir_tmp)
+                else:
+                    order_by_sql += " cast(`%s` as decimal) %s" % (col_tmp, dir_tmp)
+                idx += 1
+        # 查询数据库。
+        limit_sql = ""
+        if int(length_param) > 0:
+            limit_sql = " LIMIT %s , %s " % (start_param, length_param)
+        sql = " SELECT %s FROM `%s` %s %s %s " % (select_header,
+                                                  table_name, search_sql, order_by_sql, limit_sql)
+        count_sql = " SELECT count(1) as num FROM `%s` %s " % (table_name, search_sql)
+
+        logging.info("select sql : " + sql)
+        logging.info("count sql : " + count_sql)
+        stock_web_list = self.db.query(sql)
+        stock_web_size = self.db.query(count_sql)
+        logging.info("stockWebList size : %s " % stock_web_size)
+        df = pd.DataFrame(stock_web_list)
+        if not df.empty:
+            df = df.pivot_table(name_param, index=['date'], columns=['symbol'])
+            df = trans_NAN_to_None(df)
+        # new_stock_web_list = [{k: v for k, v in zip(df['data'].columns, value)} for value in df['data'].values]
+
+        # obj = {
+        #     "draw": 0,
+        #     "recordsTotal": stock_web_size[0]["num"],
+        #     "recordsFiltered": stock_web_size[0]["num"],
+        #     "data": stock_web_list
+        # }
+        # logging.info("####################")
+        # logging.info(obj)
+        # self.write(json.dumps(obj))
+        self.set_header('Content-Type', 'text/csv')
+        self.set_header('Content-Disposition', 'attachment; filename=' + name_param + ".csv")
+        self.set_header('Content-Encoding', 'UTF-8')
+
+        self.write(df.to_csv())

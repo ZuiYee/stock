@@ -31,7 +31,7 @@ class Application(tornado.web.Application):
             (r"/test2", Test2Handler),  # 测试页面，做写js 测试。
             # 使用datatable 展示报表数据模块。
             (r"/stock/api_data", dataTableHandler.GetStockDataHandler),
-            (r"/stock/all_data", dataTableHandler.GetStockAllDataHandler),
+            (r"/stock/factory_data", dataTableHandler.GetStockFactoryDataHandler),
             (r"/stock/data", dataTableHandler.GetStockHtmlHandler),
             # 数据修改dataEditor。
             (r"/data/editor", dataEditorHandler.GetEditorHtmlHandler),

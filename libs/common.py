@@ -19,6 +19,7 @@ from sqlalchemy.types import NVARCHAR
 # MYSQL_USER = os.environ.get('MYSQL_USER') if (os.environ.get('MYSQL_USER') != None) else "root"
 # MYSQL_PWD = os.environ.get('MYSQL_PWD') if (os.environ.get('MYSQL_PWD') != None) else "mysqldb"
 # MYSQL_DB = os.environ.get('MYSQL_DB') if (os.environ.get('MYSQL_DB') != None) else "stock_data"
+MYSQL_ONLY_HOST = "sh-cynosdbmysql-grp-6tq3s88k.sql.tencentcdb.com"
 MYSQL_HOST = "sh-cynosdbmysql-grp-6tq3s88k.sql.tencentcdb.com:21860"
 MYSQL_USER = "root"
 MYSQL_PWD = "Wang921207"
@@ -50,7 +51,7 @@ def engine_to_db(to_db):
 # 通过数据库链接 engine。
 def conn():
     try:
-        db = MySQLdb.connect(MYSQL_HOST, MYSQL_USER, MYSQL_PWD, MYSQL_DB, charset="utf8")
+        db = MySQLdb.connect(MYSQL_ONLY_HOST, MYSQL_USER, MYSQL_PWD, MYSQL_DB, port=MYSQL_PORT, charset="utf8")
         # db.autocommit = True
     except Exception as e:
         print("conn error :", e)
